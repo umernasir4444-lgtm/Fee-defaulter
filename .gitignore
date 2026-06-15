@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Sensitive data
+cert.pem
+key.pem
+users.json
+
+# Generated reports and data
+generated/
