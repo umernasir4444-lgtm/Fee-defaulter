@@ -1,19 +1,32 @@
 import os
 import sys
-import types
+from streamlit.web import cli as stcli
 
-abs_app_py = os.path.abspath(os.path.join(os.path.dirname(__file__), "app.py"))
+def main():
+    abs_app_py = os.path.abspath(os.path.join(os.path.dirname(__file__), "app.py"))
+    
+    # Configure streamlit arguments
+    args = [
+        "run",
+        abs_app_py,
+        "--server.port", "8765",
+        "--server.address", "0.0.0.0",
+        "--browser.gatherUsageStats", "false",
+        "--server.maxUploadSize", "200"
+    ]
+    
+    # Enable HTTPS if certificates exist
+    cert_path = os.path.join(os.path.dirname(__file__), "cert.pem")
+    key_path = os.path.join(os.path.dirname(__file__), "key.pem")
+    
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        args.extend([
+            "--server.sslCertFile", cert_path,
+            "--server.sslKeyFile", key_path
+        ])
+    
+    sys.argv = ["streamlit"] + args
+    sys.exit(stcli.main())
 
-# Setup module context so the app runs as __main__
-module = types.ModuleType("__main__")
-module.__file__ = abs_app_py
-sys.modules["__main__"] = module
-
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(abs_app_py))
-
-# Load and execute app.py with proper UTF-8 encoding
-with open(abs_app_py, "r", encoding="utf-8") as f:
-    code = f.read()
-
-exec(compile(code, abs_app_py, "exec"), module.__dict__)
+if __name__ == "__main__":
+    main()
