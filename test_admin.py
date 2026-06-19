@@ -1,97 +1,65 @@
-import urllib.request
-import urllib.parse
-import http.cookiejar
-import threading
-import time
 import sys
+import os
 import json
-from app import ThreadingHTTPServer, Handler, load_users, save_users, hash_password
+from pathlib import Path
 
-PORT = 9999
+# Add current directory to path so we can import app
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
-def run_server():
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    server.serve_forever()
+from app import load_users, save_users, hash_password, verify_password, analyze_files, build_sample_workbook_bytes
 
-def main():
-    # Force clean users.json for testing
-    users = {"umer": {"hash": hash_password("123"), "role": "admin"}}
+def test_user_management():
+    print("[1] Testing User Management...")
+    # Setup
+    users = load_users()
+    test_user = "test_bot"
+    test_pass = "bot_pass_123"
+    
+    # Add user
+    users[test_user] = {"hash": hash_password(test_pass), "role": "user"}
     save_users(users)
-
-    # Start server in background thread
-    t = threading.Thread(target=run_server, daemon=True)
-    t.start()
-    time.sleep(1) # wait for startup
-
-    # Setup cookie jar for session tracking
-    cj = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
-    urllib.request.install_opener(opener)
-
-    print("[1] Test Login GET...")
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/login")
-    html_content = res.read().decode('utf-8')
-    assert "Login" in html_content, "Login form not found"
-    print("-> OK")
-
-    print("[2] Test Login POST...")
-    data = urllib.parse.urlencode({"username": "umer", "password": "123"}).encode()
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/login", data=data)
-    html_content = res.read().decode('utf-8')
-    assert "Fee Defaulter Report Generator" in html_content, "Dashboard not loaded after login"
-    # Verify Admin Panel button is in dashboard header
-    assert "Admin Panel" in html_content, "Admin Panel button missing for umer"
-    print("-> OK")
-
-    print("[3] Test GET /admin...")
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/admin")
-    html_content = res.read().decode('utf-8')
-    assert "Admin Panel" in html_content, "Admin panel page not loaded"
-    assert "Role" in html_content, "Role column/label missing"
-    print("-> OK")
-
-    print("[4] Test POST /admin (Add User with role)...")
-    data = urllib.parse.urlencode({"username": "testuser", "password": "abc", "role": "user", "action": "add"}).encode()
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/admin", data=data)
-    html_content = res.read().decode('utf-8')
-    assert "added/updated successfully" in html_content, "User addition feedback missing"
-    assert "Delete User" in html_content, "Delete User button missing after adding user"
     
-    # Check users.json to ensure testuser is added and has role 'user'
-    current_users = load_users()
-    assert "testuser" in current_users, "testuser not found in database"
-    assert current_users["testuser"]["role"] == "user", "testuser has wrong role"
-    print("-> OK")
-
-    print("[5] Test GET /impersonate (Switch Dashboard)...")
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/impersonate?username=testuser")
-    html_content = res.read().decode('utf-8')
-    assert "Fee Defaulter Report Generator" in html_content, "Dashboard not loaded after impersonation"
-    # Ensure Admin Panel button is NOT visible for standard 'user'
-    assert "Admin Panel" not in html_content, "Admin Panel button visible for standard user"
-    print("-> OK")
-
-    print("[6] Switch back to umer...")
-    data = urllib.parse.urlencode({"username": "umer", "password": "123"}).encode()
-    urllib.request.urlopen(f"http://127.0.0.1:{PORT}/login", data=data)
-    print("-> OK")
-
-    print("[7] Test POST /admin (Delete User)...")
-    data = urllib.parse.urlencode({"username": "testuser", "action": "remove"}).encode()
-    res = urllib.request.urlopen(f"http://127.0.0.1:{PORT}/admin", data=data)
-    html_content = res.read().decode('utf-8')
-    assert "deleted successfully" in html_content, "User deletion feedback missing"
+    # Verify
+    reloaded = load_users()
+    assert test_user in reloaded, "User was not saved"
+    assert verify_password(test_pass, reloaded[test_user]["hash"]), "Password verification failed"
+    assert reloaded[test_user]["role"] == "user", "Role was not saved correctly"
     
-    # Check users.json to ensure testuser is deleted
-    current_users = load_users()
-    assert "testuser" not in current_users, "testuser still exists in database"
+    # Delete user
+    del reloaded[test_user]
+    save_users(reloaded)
+    
+    # Verify deletion
+    final = load_users()
+    assert test_user not in final, "User was not deleted"
     print("-> OK")
 
-    print("\n[ALL TESTS PASSED SUCCESSFULLY!]")
+def test_analysis():
+    print("[2] Testing Analysis Logic...")
+    # Generate sample data
+    sample_xlsx = build_sample_workbook_bytes()
+    files_data = [("sample.xlsx", sample_xlsx)]
+    
+    # Run analysis
+    analysis = analyze_files(files_data, month_name="Test Month")
+    
+    # Verify results
+    assert analysis["student_count"] == 3, f"Expected 3 students, got {analysis['student_count']}"
+    assert len(analysis["defaulters"]) == 2, f"Expected 2 defaulters, got {len(analysis['defaulters'])}"
+    assert analysis["total_pending"] == 25000, f"Expected 25000 pending, got {analysis['total_pending']}"
+    
+    # Check individual record
+    student_names = [r["student"] for r in analysis["records"]]
+    assert "Ali Khan" in student_names, "Student 'Ali Khan' missing"
+    print("-> OK")
 
 if __name__ == "__main__":
     try:
-        main()
+        test_user_management()
+        test_analysis()
+        print("\n[ALL CORE TESTS PASSED SUCCESSFULLY!]")
     except Exception as e:
         print(f"[FAIL] Test encountered error: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)

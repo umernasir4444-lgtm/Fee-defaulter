@@ -11,6 +11,8 @@ def main():
         abs_app_py,
         "--server.port", "8765",
         "--server.address", "0.0.0.0",
+        "--server.runOnSave", "true",
+        "--server.fileWatcherType", "auto",
         "--browser.gatherUsageStats", "false",
         "--server.maxUploadSize", "200"
     ]
