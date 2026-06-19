@@ -1,3 +1,6 @@
 streamlit
 openpyxl
 plotly
+bcrypt
+pillow
+streamlit-cropper
