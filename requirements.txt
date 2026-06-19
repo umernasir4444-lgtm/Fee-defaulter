@@ -4,3 +4,4 @@ plotly
 bcrypt
 pillow
 streamlit-cropper
+reportlab
